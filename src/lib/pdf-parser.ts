@@ -3,9 +3,9 @@ import { Transaction, CATEGORY_KEYWORDS } from './types';
 // This function dynamically imports pdfjs-dist to avoid SSR issues
 async function getPDFModule() {
   const pdfjsLib = await import('pdfjs-dist');
-  // Set worker src dynamically
+  // Set worker src to local file
   if (typeof window !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
   }
   return pdfjsLib;
 }

@@ -77,7 +77,7 @@ export default function Home() {
               <FeatureCard
                 icon={Upload}
                 title="Multi-Format Support"
-                description="Upload CSV files from any bank. Support for PDF and Excel coming soon."
+                description="Upload CSV or PDF files from any bank. Automatic format detection."
               />
               <FeatureCard
                 icon={TrendingUp}

@@ -22,6 +22,7 @@ const COLORS = [
 
 export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const currencySymbol = summary.currency === 'PKR' ? 'Rs ' : '$';
 
   const categoryData = useMemo(() => {
     return Object.entries(summary.categoryBreakdown)
@@ -55,6 +56,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
           icon={ArrowUpRight}
           color="text-red-600"
           bgColor="bg-red-50"
+          currencySymbol={currencySymbol}
         />
         <SummaryCard
           title="Total Income"
@@ -62,6 +64,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
           icon={ArrowDownRight}
           color="text-green-600"
           bgColor="bg-green-50"
+          currencySymbol={currencySymbol}
         />
         <SummaryCard
           title="Transactions"
@@ -69,6 +72,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
           icon={CreditCard}
           color="text-blue-600"
           bgColor="bg-blue-50"
+          currencySymbol=""
         />
         <SummaryCard
           title="Net Flow"
@@ -77,6 +81,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
           color={(summary.totalIncome - summary.totalSpent) >= 0 ? 'text-green-600' : 'text-red-600'}
           bgColor={(summary.totalIncome - summary.totalSpent) >= 0 ? 'bg-green-50' : 'bg-red-50'}
           showSign
+          currencySymbol={currencySymbol}
         />
       </div>
 
@@ -112,7 +117,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value?: number) => [`$${(value || 0).toFixed(2)}`, 'Amount']}
+                  formatter={(value?: number) => [`${currencySymbol}${(value || 0).toFixed(2)}`, 'Amount']}
                   contentStyle={{ borderRadius: '8px' }}
                 />
                 <Legend />
@@ -137,9 +142,9 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                <YAxis tickFormatter={(value) => `${currencySymbol}${(value / 1000).toFixed(0)}k`} />
                 <Tooltip 
-                  formatter={(value?: number) => [`$${(value || 0).toFixed(2)}`, 'Spending']}
+                  formatter={(value?: number) => [`${currencySymbol}${(value || 0).toFixed(2)}`, 'Spending']}
                   contentStyle={{ borderRadius: '8px' }}
                 />
                 <Bar dataKey="spending" fill="#3B82F6" radius={[4, 4, 0, 0]} />
@@ -167,7 +172,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
             >
               <p className="text-sm text-gray-600 truncate">{merchant.name}</p>
               <p className="text-lg font-semibold text-gray-800">
-                ${merchant.total.toFixed(2)}
+                {currencySymbol}{merchant.total.toFixed(2)}
               </p>
             </div>
           ))}
@@ -259,7 +264,8 @@ function SummaryCard({
   icon: Icon, 
   color, 
   bgColor,
-  showSign = false 
+  showSign = false,
+  currencySymbol = '$'
 }: { 
   title: string; 
   amount: number; 
@@ -267,6 +273,7 @@ function SummaryCard({
   color: string; 
   bgColor: string;
   showSign?: boolean;
+  currencySymbol?: string;
 }) {
   return (
     <div className={`${bgColor} rounded-xl p-6`}>
@@ -275,7 +282,7 @@ function SummaryCard({
         <span className="text-sm text-gray-600">{title}</span>
       </div>
       <p className={`text-2xl font-bold ${color}`}>
-        {showSign && amount > 0 ? '+' : ''}${amount.toFixed(2)}
+        {showSign && amount > 0 ? '+' : ''}{currencySymbol}{amount.toFixed(2)}
       </p>
     </div>
   );

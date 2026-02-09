@@ -45,18 +45,34 @@ function normalizeTransaction(row: any, fileName: string, index: number): Transa
   ) || keys[1];
   description = row[descKey] || '';
 
-  // Find amount
-  const amountKey = keys.find(k => {
-    const lower = k.toLowerCase();
-    return lower.includes('amount') || lower.includes('debit') || lower.includes('credit') || lower.includes('value');
-  });
-  
-  if (amountKey) {
-    const rawAmount = row[amountKey];
-    if (typeof rawAmount === 'string') {
-      amount = parseFloat(rawAmount.replace(/[$,]/g, ''));
-    } else if (typeof rawAmount === 'number') {
-      amount = rawAmount;
+  // Find amount — check for separate debit/credit columns first
+  const debitKey = keys.find(k => k.toLowerCase().includes('debit'));
+  const creditKey = keys.find(k => k.toLowerCase().includes('credit'));
+
+  if (debitKey && creditKey) {
+    // Separate debit/credit columns
+    const debitVal = parseFloat((row[debitKey] || '').toString().replace(/[$,]/g, ''));
+    const creditVal = parseFloat((row[creditKey] || '').toString().replace(/[$,]/g, ''));
+    if (!isNaN(debitVal) && debitVal > 0) {
+      amount = -debitVal;
+    } else if (!isNaN(creditVal) && creditVal > 0) {
+      amount = creditVal;
+    } else {
+      amount = 0;
+    }
+  } else {
+    const amountKey = keys.find(k => {
+      const lower = k.toLowerCase();
+      return lower.includes('amount') || lower.includes('debit') || lower.includes('credit') || lower.includes('value');
+    });
+
+    if (amountKey) {
+      const rawAmount = row[amountKey];
+      if (typeof rawAmount === 'string') {
+        amount = parseFloat(rawAmount.replace(/[$,]/g, ''));
+      } else if (typeof rawAmount === 'number') {
+        amount = rawAmount;
+      }
     }
   }
 
@@ -75,7 +91,7 @@ function normalizeTransaction(row: any, fileName: string, index: number): Transa
     id: `${fileName}-${index}-${Date.now()}`,
     date: formatDate(date),
     description: description.trim(),
-    amount: -Math.abs(amount), // Convert to expense (negative)
+    amount, // Preserve sign: negative = expense, positive = income
     currency,
     category,
     sourceFile: fileName,
@@ -103,23 +119,23 @@ export function categorizeTransaction(description: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  // Try various date formats
-  const formats = [
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // MM/DD/YYYY
-    /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // MM-DD-YYYY
-    /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
-    /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/, // MM/DD/YY
-  ];
+  // Try YYYY-MM-DD first (already correct format)
+  let match = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (match) {
+    return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  }
 
-  for (const format of formats) {
-    const match = dateStr.match(format);
-    if (match) {
-      let [, month, day, year] = match;
-      if (year.length === 2) {
-        year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
-      }
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    }
+  // MM/DD/YYYY or MM-DD-YYYY
+  match = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  }
+
+  // MM/DD/YY
+  match = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+  if (match) {
+    const year = parseInt(match[3]) > 50 ? `19${match[3]}` : `20${match[3]}`;
+    return `${year}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
   }
 
   // Return as-is if no format matched
@@ -127,38 +143,42 @@ function formatDate(dateStr: string): string {
 }
 
 export function calculateSummary(transactions: Transaction[]) {
-  // Group by currency
-  const usdTransactions = transactions.filter(t => t.currency === 'USD');
-  const pkrTransactions = transactions.filter(t => t.currency === 'PKR');
+  // Detect primary currency (whichever has more transactions)
+  const currencyCounts: Record<string, number> = {};
+  transactions.forEach(t => {
+    currencyCounts[t.currency] = (currencyCounts[t.currency] || 0) + 1;
+  });
+  const primaryCurrency = Object.entries(currencyCounts)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'USD';
 
-  const totalSpent = usdTransactions
+  const totalSpent = transactions
     .filter(t => t.amount < 0)
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
   
-  const totalIncome = usdTransactions
+  const totalIncome = transactions
     .filter(t => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Category breakdown (USD only for now)
+  // Category breakdown
   const categoryBreakdown: Record<string, number> = {};
-  usdTransactions
+  transactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + Math.abs(t.amount);
     });
 
-  // Monthly spending (USD only)
+  // Monthly spending
   const monthlySpending: Record<string, number> = {};
-  usdTransactions
+  transactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       const month = t.date.substring(0, 7); // YYYY-MM
       monthlySpending[month] = (monthlySpending[month] || 0) + Math.abs(t.amount);
     });
 
-  // Top merchants (USD only)
+  // Top merchants
   const merchantTotals: Record<string, number> = {};
-  usdTransactions
+  transactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       const name = t.description.split(' ').slice(0, 3).join(' '); // First 3 words
@@ -177,6 +197,6 @@ export function calculateSummary(transactions: Transaction[]) {
     categoryBreakdown,
     monthlySpending,
     topMerchants,
-    currency: 'USD',
+    currency: primaryCurrency,
   };
 }
