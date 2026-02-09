@@ -131,7 +131,8 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
             </div>
           ) : aiSummaryText ? (
             <div
-              className="prose prose-sm prose-invert max-w-none text-white/90 text-sm leading-relaxed"
+              className="max-w-none text-sm leading-relaxed [&_*]:text-white/90 [&_strong]:text-white [&_h3]:text-white [&_h4]:text-white"
+              style={{ color: 'rgba(255,255,255,0.9)' }}
               dangerouslySetInnerHTML={{ __html: mdToHTML(aiSummaryText) }}
             />
           ) : null}
