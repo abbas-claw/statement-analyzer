@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { Transaction, CATEGORY_KEYWORDS, DEFAULT_CATEGORIES } from './types';
+import { Transaction, CurrencySummary, CATEGORY_KEYWORDS, DEFAULT_CATEGORIES } from './types';
 
 export function parseCSV(content: string, fileName: string): Transaction[] {
   const results = Papa.parse(content, {
@@ -142,61 +142,67 @@ function formatDate(dateStr: string): string {
   return dateStr;
 }
 
-export function calculateSummary(transactions: Transaction[]) {
-  // Detect primary currency (whichever has more transactions)
-  const currencyCounts: Record<string, number> = {};
-  transactions.forEach(t => {
-    currencyCounts[t.currency] = (currencyCounts[t.currency] || 0) + 1;
-  });
-  const primaryCurrency = Object.entries(currencyCounts)
-    .sort((a, b) => b[1] - a[1])[0]?.[0] || 'USD';
-
-  const totalSpent = transactions
+function buildCurrencySummary(txns: Transaction[]): CurrencySummary {
+  const totalSpent = txns
     .filter(t => t.amount < 0)
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-  
-  const totalIncome = transactions
+
+  const totalIncome = txns
     .filter(t => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Category breakdown
   const categoryBreakdown: Record<string, number> = {};
-  transactions
-    .filter(t => t.amount < 0)
-    .forEach(t => {
-      categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + Math.abs(t.amount);
-    });
+  txns.filter(t => t.amount < 0).forEach(t => {
+    categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + Math.abs(t.amount);
+  });
 
-  // Monthly spending
   const monthlySpending: Record<string, number> = {};
-  transactions
-    .filter(t => t.amount < 0)
-    .forEach(t => {
-      const month = t.date.substring(0, 7); // YYYY-MM
-      monthlySpending[month] = (monthlySpending[month] || 0) + Math.abs(t.amount);
-    });
+  txns.filter(t => t.amount < 0).forEach(t => {
+    const month = t.date.substring(0, 7);
+    monthlySpending[month] = (monthlySpending[month] || 0) + Math.abs(t.amount);
+  });
 
-  // Top merchants
   const merchantTotals: Record<string, number> = {};
-  transactions
-    .filter(t => t.amount < 0)
-    .forEach(t => {
-      const name = t.description.split(' ').slice(0, 3).join(' '); // First 3 words
-      merchantTotals[name] = (merchantTotals[name] || 0) + Math.abs(t.amount);
-    });
+  txns.filter(t => t.amount < 0).forEach(t => {
+    const name = t.description.split(' ').slice(0, 3).join(' ');
+    merchantTotals[name] = (merchantTotals[name] || 0) + Math.abs(t.amount);
+  });
 
   const topMerchants = Object.entries(merchantTotals)
     .map(([name, total]) => ({ name, total }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
+  return { totalSpent, totalIncome, categoryBreakdown, monthlySpending, topMerchants };
+}
+
+export function calculateSummary(transactions: Transaction[]) {
+  // Group by currency
+  const byCurrency: Record<string, Transaction[]> = {};
+  transactions.forEach(t => {
+    if (!byCurrency[t.currency]) byCurrency[t.currency] = [];
+    byCurrency[t.currency].push(t);
+  });
+
+  const currencies: Record<string, CurrencySummary> = {};
+  for (const [currency, txns] of Object.entries(byCurrency)) {
+    currencies[currency] = buildCurrencySummary(txns);
+  }
+
+  // Primary currency for legacy fields
+  const primaryCurrency = Object.entries(byCurrency)
+    .sort((a, b) => b[1].length - a[1].length)[0]?.[0] || 'USD';
+  const primary = currencies[primaryCurrency] || buildCurrencySummary([]);
+
   return {
-    totalSpent,
-    totalIncome,
     transactionCount: transactions.length,
-    categoryBreakdown,
-    monthlySpending,
-    topMerchants,
+    currencies,
+    // Legacy
+    totalSpent: primary.totalSpent,
+    totalIncome: primary.totalIncome,
+    categoryBreakdown: primary.categoryBreakdown,
+    monthlySpending: primary.monthlySpending,
+    topMerchants: primary.topMerchants,
     currency: primaryCurrency,
   };
 }

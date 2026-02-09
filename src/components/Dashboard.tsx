@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { 
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
+import { useMemo, useState, useEffect } from 'react';
+import {
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { Transaction, StatementSummary, DEFAULT_CATEGORIES } from '@/lib/types';
-import { ArrowUpRight, ArrowDownRight, DollarSign, CreditCard, TrendingUp, ShoppingBag } from 'lucide-react';
+import { Transaction, StatementSummary, CurrencySummary } from '@/lib/types';
+import { ArrowUpRight, ArrowDownRight, DollarSign, CreditCard, TrendingUp, Brain, Loader2, Sparkles } from 'lucide-react';
+import { isAIEnabled, aiSummarize } from '@/lib/ai';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -20,24 +21,40 @@ const COLORS = [
   '#14B8A6', '#A855F7'
 ];
 
+function currencySymbol(c: string): string {
+  if (c === 'PKR') return 'Rs ';
+  if (c === 'EUR') return '€';
+  if (c === 'GBP') return '£';
+  return '$';
+}
+
+function fmt(amount: number, currency: string): string {
+  const sym = currencySymbol(currency);
+  if (currency === 'PKR') return `${sym}${Math.round(amount).toLocaleString()}`;
+  return `${sym}${amount.toFixed(2)}`;
+}
+
 export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const currencySymbol = summary.currency === 'PKR' ? 'Rs ' : '$';
+  const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
-  const categoryData = useMemo(() => {
-    return Object.entries(summary.categoryBreakdown)
-      .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
-      .sort((a, b) => b.value - a.value);
-  }, [summary.categoryBreakdown]);
+  const currencies = Object.keys(summary.currencies).sort();
+  const hasMultipleCurrencies = currencies.length > 1;
 
-  const monthlyData = useMemo(() => {
-    return Object.entries(summary.monthlySpending)
-      .map(([month, value]) => ({ 
-        month: formatMonth(month), 
-        spending: Math.round(value * 100) / 100 
-      }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-  }, [summary.monthlySpending]);
+  // Auto-generate AI summary when transactions change
+  useEffect(() => {
+    if (isAIEnabled() && transactions.length > 0) {
+      generateAISummary();
+    }
+  }, [transactions.length]);
+
+  const generateAISummary = async () => {
+    setAiLoading(true);
+    const result = await aiSummarize(transactions);
+    setAiSummaryText(result);
+    setAiLoading(false);
+  };
 
   const filteredTransactions = useMemo(() => {
     if (!selectedCategory) return transactions;
@@ -48,153 +65,217 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-8">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard
-          title="Total Spent"
-          amount={summary.totalSpent}
-          icon={ArrowUpRight}
-          color="text-red-600"
-          bgColor="bg-red-50"
-          currencySymbol={currencySymbol}
-        />
-        <SummaryCard
-          title="Total Income"
-          amount={summary.totalIncome}
-          icon={ArrowDownRight}
-          color="text-green-600"
-          bgColor="bg-green-50"
-          currencySymbol={currencySymbol}
-        />
-        <SummaryCard
-          title="Transactions"
-          amount={summary.transactionCount}
-          icon={CreditCard}
-          color="text-blue-600"
-          bgColor="bg-blue-50"
-          currencySymbol=""
-        />
-        <SummaryCard
-          title="Net Flow"
-          amount={summary.totalIncome - summary.totalSpent}
-          icon={TrendingUp}
-          color={(summary.totalIncome - summary.totalSpent) >= 0 ? 'text-green-600' : 'text-red-600'}
-          bgColor={(summary.totalIncome - summary.totalSpent) >= 0 ? 'bg-green-50' : 'bg-red-50'}
-          showSign
-          currencySymbol={currencySymbol}
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Spending by Category */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Spending by Category</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                  onClick={(_, index) => {
-                    if (categoryData[index]) {
-                      setSelectedCategory(selectedCategory === categoryData[index].name ? null : categoryData[index].name);
-                    }
-                  }}
-                >
-                  {categoryData.map((_, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={COLORS[index % COLORS.length]}
-                      stroke={selectedCategory === categoryData[index]?.name ? '#000' : 'none'}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value?: number) => [`${currencySymbol}${(value || 0).toFixed(2)}`, 'Amount']}
-                  contentStyle={{ borderRadius: '8px' }}
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          {selectedCategory && (
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className="mt-4 text-sm text-blue-600 hover:text-blue-700"
-            >
-              Clear filter (showing: {selectedCategory})
-            </button>
-          )}
-        </div>
-
-        {/* Monthly Spending */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Spending</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(value) => `${currencySymbol}${(value / 1000).toFixed(0)}k`} />
-                <Tooltip 
-                  formatter={(value?: number) => [`${currencySymbol}${(value || 0).toFixed(2)}`, 'Spending']}
-                  contentStyle={{ borderRadius: '8px' }}
-                />
-                <Bar dataKey="spending" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Merchants */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Merchants</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {summary.topMerchants.slice(0, 10).map((merchant, index) => (
-            <div 
-              key={index}
-              className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-              onClick={() => {
-                const name = merchant.name.split(' ').slice(0, 3).join(' ');
-                const matchingCategory = transactions.find(t => 
-                  t.description.split(' ').slice(0, 3).join(' ') === name
-                )?.category;
-                setSelectedCategory(matchingCategory || null);
-              }}
-            >
-              <p className="text-sm text-gray-600 truncate">{merchant.name}</p>
-              <p className="text-lg font-semibold text-gray-800">
-                {currencySymbol}{merchant.total.toFixed(2)}
-              </p>
+      {/* Summary Cards — one row per currency */}
+      {currencies.map(currency => {
+        const cs = summary.currencies[currency];
+        const sym = currencySymbol(currency);
+        return (
+          <div key={currency}>
+            {hasMultipleCurrencies && (
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                {currency} Transactions
+              </h3>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <SummaryCard
+                title="Total Spent"
+                value={fmt(cs.totalSpent, currency)}
+                icon={ArrowUpRight}
+                color="text-red-600"
+                bgColor="bg-red-50"
+              />
+              <SummaryCard
+                title="Total Income"
+                value={fmt(cs.totalIncome, currency)}
+                icon={ArrowDownRight}
+                color="text-green-600"
+                bgColor="bg-green-50"
+              />
+              <SummaryCard
+                title="Transactions"
+                value={String(transactions.filter(t => t.currency === currency).length)}
+                icon={CreditCard}
+                color="text-blue-600"
+                bgColor="bg-blue-50"
+              />
+              <SummaryCard
+                title="Net Flow"
+                value={`${cs.totalIncome - cs.totalSpent >= 0 ? '+' : ''}${fmt(cs.totalIncome - cs.totalSpent, currency)}`}
+                icon={TrendingUp}
+                color={(cs.totalIncome - cs.totalSpent) >= 0 ? 'text-green-600' : 'text-red-600'}
+                bgColor={(cs.totalIncome - cs.totalSpent) >= 0 ? 'bg-green-50' : 'bg-red-50'}
+              />
             </div>
-          ))}
+          </div>
+        );
+      })}
+
+      {/* AI Summary */}
+      {isAIEnabled() && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-gray-800">AI Spending Analysis</h3>
+            </div>
+            {!aiLoading && (
+              <button
+                onClick={generateAISummary}
+                className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
+              >
+                <Brain className="w-4 h-4" /> Regenerate
+              </button>
+            )}
+          </div>
+          {aiLoading ? (
+            <div className="flex items-center gap-2 text-purple-600 py-4">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Analyzing your spending patterns...</span>
+            </div>
+          ) : aiSummaryText ? (
+            <div
+              className="prose prose-sm max-w-none text-gray-700"
+              dangerouslySetInnerHTML={{ __html: markdownToHTML(aiSummaryText) }}
+            />
+          ) : null}
         </div>
-      </div>
+      )}
+
+      {/* Charts — one set per currency */}
+      {currencies.map(currency => {
+        const cs = summary.currencies[currency];
+        const sym = currencySymbol(currency);
+
+        const categoryData = Object.entries(cs.categoryBreakdown)
+          .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
+          .sort((a, b) => b.value - a.value);
+
+        const monthlyData = Object.entries(cs.monthlySpending)
+          .map(([month, value]) => ({
+            month: formatMonth(month),
+            spending: Math.round(value * 100) / 100,
+          }))
+          .sort((a, b) => a.month.localeCompare(b.month));
+
+        return (
+          <div key={`charts-${currency}`}>
+            {hasMultipleCurrencies && (
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                {currency} Breakdown
+              </h3>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Category Pie */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Spending by Category</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        onClick={(_, index) => {
+                          if (categoryData[index]) {
+                            setSelectedCategory(
+                              selectedCategory === categoryData[index].name ? null : categoryData[index].name
+                            );
+                          }
+                        }}
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                            stroke={selectedCategory === entry.name ? '#000' : 'none'}
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value?: number) => [fmt(value || 0, currency), 'Amount']}
+                        contentStyle={{ borderRadius: '8px' }}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Monthly Bar */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Spending</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(v) => currency === 'PKR' ? `${Math.round(v / 1000)}k` : `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        formatter={(value?: number) => [fmt(value || 0, currency), 'Spending']}
+                        contentStyle={{ borderRadius: '8px' }}
+                      />
+                      <Bar dataKey="spending" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Merchants */}
+            {cs.topMerchants.length > 0 && (
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Top Merchants {hasMultipleCurrencies && `(${currency})`}
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {cs.topMerchants.slice(0, 10).map((merchant, index) => (
+                    <div
+                      key={index}
+                      className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                    >
+                      <p className="text-sm text-gray-600 truncate">{merchant.name}</p>
+                      <p className="text-lg font-semibold text-gray-800">{fmt(merchant.total, currency)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Category filter indicator */}
+      {selectedCategory && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Filtered by:</span>
+          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+            {selectedCategory}
+          </span>
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className="text-sm text-blue-600 hover:text-blue-700 underline"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* File Sources */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Statement Sources</h3>
         <div className="flex flex-wrap gap-2">
           {uniqueFiles.map((file, index) => (
-            <span 
+            <span
               key={index}
               className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm"
             >
               {file}
-              <button
-                onClick={() => onRemoveFile(file)}
-                className="hover:text-blue-900"
-              >
-                ×
-              </button>
+              <button onClick={() => onRemoveFile(file)} className="hover:text-blue-900">×</button>
             </span>
           ))}
         </div>
@@ -204,12 +285,9 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
       {filteredTransactions.length > 0 && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">
-              Transactions 
-              {selectedCategory && <span className="text-blue-600"> ({selectedCategory})</span>}
-            </h3>
+            <h3 className="text-lg font-semibold text-gray-800">Transactions</h3>
             <span className="text-sm text-gray-500">
-              Showing {filteredTransactions.length} of {transactions.length}
+              Showing {Math.min(filteredTransactions.length, 100)} of {filteredTransactions.length}
             </span>
           </div>
           <div className="overflow-x-auto">
@@ -223,7 +301,7 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.slice(0, 50).map((t) => (
+                {filteredTransactions.slice(0, 100).map((t) => (
                   <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4 text-sm text-gray-600">{t.date}</td>
                     <td className="py-3 px-4 text-sm text-gray-800 truncate max-w-xs">{t.description}</td>
@@ -235,20 +313,20 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
                     <td className={`py-3 px-4 text-sm font-medium text-right ${
                       t.amount >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      <span className="inline-flex items-center gap-1">
-                        {t.currency === 'PKR' ? 'Rs' : '$'}{Math.abs(t.amount).toFixed(2)}
-                        {t.currency === 'PKR' && (
-                          <span className="px-1 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">PKR</span>
-                        )}
-                      </span>
+                      {fmt(Math.abs(t.amount), t.currency)}
+                      {hasMultipleCurrencies && (
+                        <span className="ml-1 px-1 py-0.5 bg-gray-100 text-gray-500 text-xs rounded">
+                          {t.currency}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {filteredTransactions.length > 50 && (
+            {filteredTransactions.length > 100 && (
               <p className="text-center py-4 text-sm text-gray-500">
-                Showing first 50 of {filteredTransactions.length} transactions
+                Showing first 100 of {filteredTransactions.length} transactions
               </p>
             )}
           </div>
@@ -258,22 +336,20 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
   );
 }
 
-function SummaryCard({ 
-  title, 
-  amount, 
-  icon: Icon, 
-  color, 
+// ---- Helper components ----
+
+function SummaryCard({
+  title,
+  value,
+  icon: Icon,
+  color,
   bgColor,
-  showSign = false,
-  currencySymbol = '$'
-}: { 
-  title: string; 
-  amount: number; 
-  icon: any; 
-  color: string; 
+}: {
+  title: string;
+  value: string;
+  icon: any;
+  color: string;
   bgColor: string;
-  showSign?: boolean;
-  currencySymbol?: string;
 }) {
   return (
     <div className={`${bgColor} rounded-xl p-6`}>
@@ -281,9 +357,7 @@ function SummaryCard({
         <Icon className={`w-5 h-5 ${color}`} />
         <span className="text-sm text-gray-600">{title}</span>
       </div>
-      <p className={`text-2xl font-bold ${color}`}>
-        {showSign && amount > 0 ? '+' : ''}{currencySymbol}{amount.toFixed(2)}
-      </p>
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
   );
 }
@@ -292,4 +366,17 @@ function formatMonth(monthStr: string): string {
   const [year, month] = monthStr.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1);
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+}
+
+// Simple markdown to HTML (bold, italic, headers, lists, line breaks)
+function markdownToHTML(md: string): string {
+  return md
+    .replace(/^### (.+)$/gm, '<h4 class="font-semibold text-gray-800 mt-3 mb-1">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="font-semibold text-gray-800 mt-4 mb-2">$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<li class="ml-4">$1</li>')
+    .replace(/(<li.*<\/li>\n?)+/g, (m) => `<ul class="list-disc mb-2">${m}</ul>`)
+    .replace(/\n\n/g, '<br/><br/>')
+    .replace(/\n/g, '<br/>');
 }

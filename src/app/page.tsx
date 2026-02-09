@@ -1,24 +1,46 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { FileUploader } from '@/components/FileUploader';
 import { Dashboard } from '@/components/Dashboard';
-import { Transaction, StatementSummary, DEFAULT_CATEGORIES } from '@/lib/types';
+import { AISettings } from '@/components/AISettings';
+import { Transaction } from '@/lib/types';
 import { calculateSummary } from '@/lib/parser';
-import { BarChart3, Upload, TrendingUp, DollarSign } from 'lucide-react';
+import { isAIEnabled, aiCategorize } from '@/lib/ai';
+import { BarChart3, Upload, TrendingUp, DollarSign, Brain } from 'lucide-react';
 
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showAISettings, setShowAISettings] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  // Check AI status on mount
+  useState(() => {
+    if (typeof window !== 'undefined') {
+      setAiEnabled(isAIEnabled());
+    }
+  });
 
   const summary = useMemo(() => {
     return calculateSummary(transactions);
   }, [transactions]);
 
-  const handleFilesParsed = (newTransactions: Transaction[]) => {
-    setTransactions(prev => [...prev, ...newTransactions]);
+  const handleFilesParsed = useCallback(async (newTransactions: Transaction[]) => {
+    let processed = newTransactions;
+
+    // Run AI categorization if enabled
+    if (isAIEnabled()) {
+      try {
+        processed = await aiCategorize(newTransactions);
+      } catch {
+        // Falls back to keyword categories
+      }
+    }
+
+    setTransactions(prev => [...prev, ...processed]);
     setShowOnboarding(false);
-  };
+  }, []);
 
   const handleRemoveFile = (fileName: string) => {
     const remainingTransactions = transactions.filter(t => t.sourceFile !== fileName);
@@ -46,14 +68,27 @@ export default function Home() {
                 <p className="text-sm text-gray-500">Free, private, local processing</p>
               </div>
             </div>
-            {transactions.length > 0 && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleReset}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={() => setShowAISettings(true)}
+                className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-1.5 ${
+                  aiEnabled
+                    ? 'text-purple-700 bg-purple-50 hover:bg-purple-100'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                }`}
               >
-                Clear All
+                <Brain className="w-4 h-4" />
+                {aiEnabled ? 'AI On' : 'AI'}
               </button>
-            )}
+              {transactions.length > 0 && (
+                <button
+                  onClick={handleReset}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -82,12 +117,12 @@ export default function Home() {
               <FeatureCard
                 icon={TrendingUp}
                 title="Smart Categorization"
-                description="Automatic categorization of transactions based on merchant names and keywords."
+                description="Automatic categorization with keyword matching, or enable AI for even better accuracy."
               />
               <FeatureCard
                 icon={DollarSign}
-                title="Visual Insights"
-                description="Beautiful charts showing spending patterns, trends, and top merchants."
+                title="Multi-Currency"
+                description="Supports USD, PKR, and more. Each currency gets its own breakdown and charts."
               />
             </div>
 
@@ -102,14 +137,15 @@ export default function Home() {
             {/* Privacy Notice */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm text-green-800">
-                <strong>🔒 Privacy First:</strong> All processing happens in your browser. 
+                <strong>🔒 Privacy First:</strong> All processing happens in your browser.
                 Your financial data never leaves your device.
+                {aiEnabled && ' AI features call the API directly from your browser — no middleman.'}
               </p>
             </div>
           </div>
         ) : (
-          <Dashboard 
-            transactions={transactions} 
+          <Dashboard
+            transactions={transactions}
             summary={summary}
             onRemoveFile={handleRemoveFile}
           />
@@ -124,6 +160,14 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* AI Settings Modal */}
+      {showAISettings && (
+        <AISettings
+          onClose={() => setShowAISettings(false)}
+          onSave={() => setAiEnabled(isAIEnabled())}
+        />
+      )}
     </div>
   );
 }
