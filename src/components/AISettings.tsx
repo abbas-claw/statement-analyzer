@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Brain, Key, X, Check } from 'lucide-react';
+import { Brain, Key, X, Check, Zap } from 'lucide-react';
 import { getAIKey, setAIKey, getAIProvider, setAIProvider, type AIProvider } from '@/lib/ai';
 
 interface AISettingsProps {
@@ -27,7 +27,7 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
       setSaved(false);
       onSave();
       onClose();
-    }, 800);
+    }, 600);
   };
 
   const handleClear = () => {
@@ -38,51 +38,56 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl">
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="brutal-card bg-white p-6 max-w-md w-full">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-purple-600" />
-            <h3 className="text-lg font-semibold text-gray-800">AI Features</h3>
+            <div className="w-10 h-10 bg-[var(--accent-purple)] flex items-center justify-center">
+              <Brain className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold uppercase tracking-wide">AI Features</h3>
+              <p className="text-xs text-gray-500 font-medium">Smarter analysis</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 border-2 border-[var(--border)]">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
+        <div className="brutal-card-flat p-3 mb-4 bg-[var(--accent-lime)]">
+          <p className="text-xs font-bold">
+            <Zap className="w-3.5 h-3.5 inline mr-1" />
+            Enables: Smart categorization • Spending summary • Screenshot reading
+          </p>
+        </div>
+
         <p className="text-sm text-gray-600 mb-4">
-          Enable AI-powered categorization and spending summaries. Your API key is stored locally in your browser — never sent to any server except the AI provider.
+          API key stays in your browser. Calls go direct to the provider — no middleman.
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-2">Provider</label>
             <div className="flex gap-2">
-              <button
-                onClick={() => setProvider('openai')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  provider === 'openai'
-                    ? 'bg-purple-50 border-purple-300 text-purple-700'
-                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                OpenAI
-              </button>
-              <button
-                onClick={() => setProvider('gemini')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  provider === 'gemini'
-                    ? 'bg-purple-50 border-purple-300 text-purple-700'
-                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Gemini (Free)
-              </button>
+              {(['openai', 'gemini'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setProvider(p)}
+                  className={`flex-1 px-3 py-3 text-sm font-bold uppercase tracking-wide border-3 transition-all ${
+                    provider === p
+                      ? 'bg-[var(--accent-purple)] text-white border-[var(--border)] shadow-[3px_3px_0px_var(--border)]'
+                      : 'bg-white border-[var(--border)] hover:bg-gray-50'
+                  }`}
+                >
+                  {p === 'openai' ? 'OpenAI' : 'Gemini ✦ Free'}
+                </button>
+              ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-bold uppercase tracking-wider mb-2">
               <Key className="w-3.5 h-3.5 inline mr-1" />
               API Key
             </label>
@@ -91,12 +96,12 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
               value={key}
               onChange={(e) => setKey(e.target.value)}
               placeholder={provider === 'openai' ? 'sk-...' : 'AIza...'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+              className="w-full px-3 py-3 border-3 border-[var(--border)] text-sm font-mono focus:ring-0 focus:border-[var(--accent-purple)] outline-none bg-white"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1 font-medium">
               {provider === 'openai'
-                ? 'Get yours at platform.openai.com/api-keys'
-                : 'Get yours at aistudio.google.com/apikey'}
+                ? '→ platform.openai.com/api-keys'
+                : '→ aistudio.google.com/apikey (free tier available)'}
             </p>
           </div>
         </div>
@@ -105,24 +110,24 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
           {getAIKey() && (
             <button
               onClick={handleClear}
-              className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="brutal-btn px-4 py-2 text-xs bg-[var(--accent-red)] text-white"
             >
-              Remove Key
+              Remove
             </button>
           )}
           <div className="flex-1" />
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="px-4 py-2 text-xs font-bold uppercase hover:bg-gray-100 border-2 border-gray-300"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saved}
-            className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+            className="brutal-btn px-6 py-2 text-xs bg-[var(--accent-purple)] text-white disabled:opacity-50"
           >
-            {saved ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
+            {saved ? <><Check className="w-4 h-4 inline mr-1" />Done</> : 'Save'}
           </button>
         </div>
       </div>

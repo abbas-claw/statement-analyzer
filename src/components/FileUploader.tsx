@@ -1,15 +1,15 @@
 'use client';
 
 import { useCallback, useState, useTransition } from 'react';
-import { Upload, FileText, X, AlertCircle } from 'lucide-react';
+import { Upload, FileText, X, AlertCircle, Image, Camera } from 'lucide-react';
 import { Transaction } from '@/lib/types';
 import { parseCSV } from '@/lib/parser';
+import { isAIEnabled, aiExtractFromImage, aiCategorize } from '@/lib/ai';
 
 interface FileUploaderProps {
   onFilesParsed: (transactions: Transaction[]) => void;
 }
 
-// Dynamic import for PDF parser (client-side only)
 let parsePDFTransaction: ((file: File) => Promise<Transaction[]>) | null = null;
 
 async function loadPDFParser(): Promise<(file: File) => Promise<Transaction[]>> {
@@ -21,6 +21,19 @@ async function loadPDFParser(): Promise<(file: File) => Promise<Transaction[]>> 
     };
   }
   return parsePDFTransaction;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif|heic)$/i.test(file.name);
 }
 
 export function FileUploader({ onFilesParsed }: FileUploaderProps) {
@@ -41,17 +54,14 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    processFiles(droppedFiles);
+    processFiles(Array.from(e.dataTransfer.files));
   }, []);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    processFiles(selectedFiles);
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    processFiles(Array.from(e.target.files || []));
   }, []);
 
   const processFiles = async (filesToProcess: File[]) => {
@@ -59,41 +69,51 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
       setProcessing(true);
       setError(null);
     });
-    
+
     const allTransactions: Transaction[] = [];
 
     for (const file of filesToProcess) {
       try {
-        startTransition(() => {
-          setProcessingFile(file.name);
-        });
-        
-        if (file.name.endsWith('.csv')) {
-          const content = await readFileContent(file);
-          const transactions = parseCSV(content, file.name);
+        startTransition(() => setProcessingFile(file.name));
+
+        if (isImageFile(file)) {
+          // Image OCR via AI
+          if (!isAIEnabled()) {
+            startTransition(() => setError(`Enable AI (click "AI" in header) to extract transactions from screenshots.`));
+            continue;
+          }
+          const base64 = await fileToBase64(file);
+          const transactions = await aiExtractFromImage(base64, file.name);
+          if (transactions.length === 0) {
+            startTransition(() => setError(`No transactions found in ${file.name}. Make sure the screenshot shows transaction details clearly.`));
+          }
           allTransactions.push(...transactions);
         } else if (file.name.endsWith('.pdf')) {
           const pdfParser = await loadPDFParser();
-          const transactions = await pdfParser(file);
+          let transactions = await pdfParser(file);
+          if (isAIEnabled() && transactions.length > 0) {
+            transactions = await aiCategorize(transactions);
+          }
           allTransactions.push(...transactions);
         } else {
-          // Try to parse as CSV anyway
+          // CSV or text
           const content = await readFileContent(file);
-          const transactions = parseCSV(content, file.name);
+          let transactions = parseCSV(content, file.name);
+          if (isAIEnabled() && transactions.length > 0) {
+            transactions = await aiCategorize(transactions);
+          }
           allTransactions.push(...transactions);
         }
       } catch (err) {
         console.error(`Error parsing ${file.name}:`, err);
-        startTransition(() => {
-          setError(`Error parsing ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        });
+        startTransition(() => setError(`Error parsing ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`));
       }
     }
 
     if (allTransactions.length > 0) {
       onFilesParsed(allTransactions);
     }
-    
+
     startTransition(() => {
       setFiles(prev => [...prev, ...filesToProcess]);
       setProcessing(false);
@@ -114,73 +134,87 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const aiOn = isAIEnabled();
+
   return (
     <div className="w-full max-w-2xl mx-auto">
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer
-          ${isDragging 
-            ? 'border-blue-500 bg-blue-50' 
-            : 'border-gray-300 hover:border-gray-400'
+        className={`brutal-card-flat p-8 sm:p-12 text-center cursor-pointer transition-all
+          ${isDragging
+            ? 'bg-[var(--accent-lime)] border-[var(--accent-blue)]'
+            : 'bg-white hover:bg-gray-50'
           }`}
       >
         <input
           type="file"
           multiple
-          accept=".csv,.pdf"
+          accept=".csv,.pdf,.png,.jpg,.jpeg,.webp,.heic"
           onChange={handleFileSelect}
           className="hidden"
           id="file-upload"
         />
-        
-        <label htmlFor="file-upload" className="cursor-pointer">
-          <Upload className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-lg font-medium text-gray-700 mb-2">
-            Drop your statement files here
+
+        <label htmlFor="file-upload" className="cursor-pointer block">
+          <div className="flex justify-center gap-3 mb-4">
+            <Upload className="w-12 h-12 sm:w-16 sm:h-16 text-[var(--fg)]" strokeWidth={2.5} />
+          </div>
+          <p className="text-lg sm:text-xl font-bold text-[var(--fg)] mb-2 uppercase tracking-wide">
+            Drop files here
           </p>
-          <p className="text-sm text-gray-500">
-            or click to browse (CSV, PDF)
+          <p className="text-sm text-gray-600 font-medium">
+            CSV, PDF{aiOn ? ', or Screenshots (PNG, JPG)' : ''}
           </p>
+          {aiOn && (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-[var(--accent-purple)] text-white text-xs font-bold uppercase brutal-tag">
+              <Camera className="w-3.5 h-3.5" />
+              AI Screenshot Reading Active
+            </div>
+          )}
         </label>
       </div>
 
       {processing && (
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
-          <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-          Processing {processingFile}...
+        <div className="mt-4 brutal-card-flat p-4 bg-[var(--accent-yellow)] flex items-center gap-3">
+          <div className="w-5 h-5 border-3 border-[var(--fg)] border-t-transparent rounded-full animate-spin" />
+          <span className="font-bold text-sm uppercase">Processing {processingFile}...</span>
         </div>
       )}
 
       {error && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          {error}
+        <div className="mt-4 brutal-card-flat p-4 bg-[var(--accent-pink)] text-white flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <span className="text-sm font-medium">{error}</span>
         </div>
       )}
 
       {files.length > 0 && (
         <div className="mt-6">
-          <h3 className="font-medium text-gray-700 mb-3">Uploaded Files:</h3>
+          <h3 className="font-bold text-sm uppercase tracking-wider mb-3">Uploaded</h3>
           <div className="space-y-2">
             {files.map((file, index) => (
-              <div 
+              <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                className="flex items-center justify-between p-3 brutal-card-flat bg-white"
               >
-                <div className="flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-gray-400" />
-                  <span className="text-sm text-gray-700">{file.name}</span>
-                  <span className="text-xs text-gray-400">
-                    ({(file.size / 1024).toFixed(1)} KB)
+                <div className="flex items-center gap-3 min-w-0">
+                  {isImageFile(file) ? (
+                    <Image className="w-5 h-5 text-[var(--accent-purple)] flex-shrink-0" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-[var(--fg)] flex-shrink-0" />
+                  )}
+                  <span className="text-sm font-medium truncate">{file.name}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">
+                    {(file.size / 1024).toFixed(1)}KB
                   </span>
                 </div>
                 <button
                   onClick={() => removeFile(index)}
-                  className="p-1 hover:bg-gray-200 rounded"
+                  className="p-1 hover:bg-gray-200 flex-shrink-0"
                 >
-                  <X className="w-4 h-4 text-gray-500" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             ))}
