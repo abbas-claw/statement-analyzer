@@ -109,7 +109,7 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
 
       {/* AI Summary */}
       {isAIEnabled() && (
-        <div className="brutal-card p-5 sm:p-6 bg-[var(--accent-purple)] text-white">
+        <div className="brutal-card p-5 sm:p-6 bg-[#7C3AED] text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5" />

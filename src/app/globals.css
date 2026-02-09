@@ -33,7 +33,6 @@ body {
 
 /* Brutalist card */
 .brutal-card {
-  background: var(--card);
   border: 3px solid var(--border);
   box-shadow: 6px 6px 0px var(--border);
   transition: box-shadow 0.15s, transform 0.15s;
@@ -45,7 +44,6 @@ body {
 }
 
 .brutal-card-flat {
-  background: var(--card);
   border: 3px solid var(--border);
 }
 
