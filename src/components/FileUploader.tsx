@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { Upload, FileText, X, Check, AlertCircle } from 'lucide-react';
+import { useCallback, useState, useTransition } from 'react';
+import { Upload, FileText, X, AlertCircle } from 'lucide-react';
 import { Transaction } from '@/lib/types';
 import { parseCSV } from '@/lib/parser';
 
@@ -9,11 +9,27 @@ interface FileUploaderProps {
   onFilesParsed: (transactions: Transaction[]) => void;
 }
 
+// Dynamic import for PDF parser (client-side only)
+let parsePDFTransaction: ((file: File) => Promise<Transaction[]>) | null = null;
+
+async function loadPDFParser(): Promise<(file: File) => Promise<Transaction[]>> {
+  if (!parsePDFTransaction) {
+    const pdfModule = await import('@/lib/pdf-parser');
+    parsePDFTransaction = async (file: File) => {
+      const pdfText = await pdfModule.parsePDF(file);
+      return pdfModule.extractTransactionsFromPDFText(pdfText, file.name);
+    };
+  }
+  return parsePDFTransaction;
+}
+
 export function FileUploader({ onFilesParsed }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [processingFile, setProcessingFile] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -38,30 +54,39 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
     processFiles(selectedFiles);
   }, []);
 
-  const processFiles = async (files: File[]) => {
-    setProcessing(true);
-    setError(null);
+  const processFiles = async (filesToProcess: File[]) => {
+    startTransition(() => {
+      setProcessing(true);
+      setError(null);
+    });
     
     const allTransactions: Transaction[] = [];
 
-    for (const file of files) {
+    for (const file of filesToProcess) {
       try {
-        const content = await readFileContent(file);
+        startTransition(() => {
+          setProcessingFile(file.name);
+        });
         
         if (file.name.endsWith('.csv')) {
+          const content = await readFileContent(file);
           const transactions = parseCSV(content, file.name);
           allTransactions.push(...transactions);
         } else if (file.name.endsWith('.pdf')) {
-          // PDF support will be added later
-          setError('PDF support coming soon. Please use CSV for now.');
+          const pdfParser = await loadPDFParser();
+          const transactions = await pdfParser(file);
+          allTransactions.push(...transactions);
         } else {
           // Try to parse as CSV anyway
+          const content = await readFileContent(file);
           const transactions = parseCSV(content, file.name);
           allTransactions.push(...transactions);
         }
       } catch (err) {
         console.error(`Error parsing ${file.name}:`, err);
-        setError(`Error parsing ${file.name}`);
+        startTransition(() => {
+          setError(`Error parsing ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        });
       }
     }
 
@@ -69,8 +94,11 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
       onFilesParsed(allTransactions);
     }
     
-    setFiles(prev => [...prev, ...files]);
-    setProcessing(false);
+    startTransition(() => {
+      setFiles(prev => [...prev, ...filesToProcess]);
+      setProcessing(false);
+      setProcessingFile(null);
+    });
   };
 
   const readFileContent = (file: File): Promise<string> => {
@@ -101,7 +129,7 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
         <input
           type="file"
           multiple
-          accept=".csv,.pdf,.xlsx,.xls"
+          accept=".csv,.pdf"
           onChange={handleFileSelect}
           className="hidden"
           id="file-upload"
@@ -113,10 +141,17 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
             Drop your statement files here
           </p>
           <p className="text-sm text-gray-500">
-            or click to browse (CSV, PDF, Excel)
+            or click to browse (CSV, PDF)
           </p>
         </label>
       </div>
+
+      {processing && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700">
+          <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+          Processing {processingFile}...
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
