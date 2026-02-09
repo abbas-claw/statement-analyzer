@@ -3,6 +3,7 @@ export interface Transaction {
   date: string;
   description: string;
   amount: number;
+  currency: string;
   category: string;
   sourceFile: string;
 }
@@ -14,6 +15,7 @@ export interface StatementSummary {
   categoryBreakdown: Record<string, number>;
   monthlySpending: Record<string, number>;
   topMerchants: { name: string; total: number }[];
+  currency: string;
 }
 
 export const DEFAULT_CATEGORIES = [

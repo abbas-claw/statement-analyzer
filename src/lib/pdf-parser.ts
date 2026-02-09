@@ -32,6 +32,9 @@ export async function parsePDF(file: File): Promise<string> {
 export function extractTransactionsFromPDFText(pdfText: string, fileName: string): Transaction[] {
   const transactions: Transaction[] = [];
   
+  // Detect currency from PDF text
+  const currency = detectCurrency(pdfText);
+  
   // Common PDF statement patterns
   // Looking for lines with date, description, and amount
   const lines = pdfText.split('\n');
@@ -96,12 +99,21 @@ export function extractTransactionsFromPDFText(pdfText: string, fileName: string
       date: formatDate(dateMatch),
       description: description.substring(0, 100),
       amount: amount,
+      currency,
       category,
       sourceFile: fileName,
     });
   }
   
   return transactions;
+}
+
+function detectCurrency(content: string): string {
+  // Check for PKR indicators
+  if (content.toLowerCase().includes('pkr') || content.includes('Rs.') || content.toLowerCase().includes('rs ')) {
+    return 'PKR';
+  }
+  return 'USD';
 }
 
 function categorizeTransaction(description: string): string {

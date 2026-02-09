@@ -67,14 +67,27 @@ function normalizeTransaction(row: any, fileName: string, index: number): Transa
   // Auto-categorize
   const category = categorizeTransaction(description);
 
+  // Detect currency from the entire row content
+  const rowContent = JSON.stringify(row).toLowerCase();
+  const currency = detectCurrency(rowContent);
+
   return {
     id: `${fileName}-${index}-${Date.now()}`,
     date: formatDate(date),
     description: description.trim(),
     amount: -Math.abs(amount), // Convert to expense (negative)
+    currency,
     category,
     sourceFile: fileName,
   };
+}
+
+function detectCurrency(content: string): string {
+  // Check for PKR indicators
+  if (content.includes('pkr') || content.includes('rs.') || content.includes('rs ')) {
+    return 'PKR';
+  }
+  return 'USD';
 }
 
 export function categorizeTransaction(description: string): string {
@@ -114,34 +127,38 @@ function formatDate(dateStr: string): string {
 }
 
 export function calculateSummary(transactions: Transaction[]) {
-  const totalSpent = transactions
+  // Group by currency
+  const usdTransactions = transactions.filter(t => t.currency === 'USD');
+  const pkrTransactions = transactions.filter(t => t.currency === 'PKR');
+
+  const totalSpent = usdTransactions
     .filter(t => t.amount < 0)
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
   
-  const totalIncome = transactions
+  const totalIncome = usdTransactions
     .filter(t => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  // Category breakdown
+  // Category breakdown (USD only for now)
   const categoryBreakdown: Record<string, number> = {};
-  transactions
+  usdTransactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + Math.abs(t.amount);
     });
 
-  // Monthly spending
+  // Monthly spending (USD only)
   const monthlySpending: Record<string, number> = {};
-  transactions
+  usdTransactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       const month = t.date.substring(0, 7); // YYYY-MM
       monthlySpending[month] = (monthlySpending[month] || 0) + Math.abs(t.amount);
     });
 
-  // Top merchants
+  // Top merchants (USD only)
   const merchantTotals: Record<string, number> = {};
-  transactions
+  usdTransactions
     .filter(t => t.amount < 0)
     .forEach(t => {
       const name = t.description.split(' ').slice(0, 3).join(' '); // First 3 words
@@ -160,5 +177,6 @@ export function calculateSummary(transactions: Transaction[]) {
     categoryBreakdown,
     monthlySpending,
     topMerchants,
+    currency: 'USD',
   };
 }

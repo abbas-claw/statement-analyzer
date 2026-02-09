@@ -230,7 +230,12 @@ export function Dashboard({ transactions, summary, onRemoveFile }: DashboardProp
                     <td className={`py-3 px-4 text-sm font-medium text-right ${
                       t.amount >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {t.amount >= 0 ? '+' : ''}${Math.abs(t.amount).toFixed(2)}
+                      <span className="inline-flex items-center gap-1">
+                        {t.currency === 'PKR' ? 'Rs' : '$'}{Math.abs(t.amount).toFixed(2)}
+                        {t.currency === 'PKR' && (
+                          <span className="px-1 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">PKR</span>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}
