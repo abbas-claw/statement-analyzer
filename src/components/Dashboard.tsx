@@ -6,9 +6,11 @@ import {
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { Transaction, StatementSummary, CurrencySummary } from '@/lib/types';
-import { ArrowUpRight, ArrowDownRight, CreditCard, TrendingUp, Brain, Loader2, Sparkles, Upload, ChevronDown } from 'lucide-react';
+import { detectRecurringTransactions, generateHeatmapData, HeatmapData } from '@/lib/analysis';
+import { ArrowUpRight, ArrowDownRight, CreditCard, TrendingUp, Brain, Loader2, Sparkles, Upload, ChevronDown, Repeat, Calendar, Download, Share2 } from 'lucide-react';
 import { isAIEnabled, aiSummarize } from '@/lib/ai';
 import { FileUploader } from './FileUploader';
+import Papa from 'papaparse';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -38,12 +40,22 @@ function fmt(amount: number, currency: string): string {
 
 export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactions }: DashboardProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
   const currencies = Object.keys(summary.currencies).sort();
   const multi = currencies.length > 1;
+
+  const recurring = useMemo(() => {
+    // Clone to avoid mutating state directly
+    const cloned = transactions.map(t => ({ ...t }));
+    return detectRecurringTransactions(cloned).filter(t => t.isRecurring);
+  }, [transactions]);
+
+  const heatmapData = useMemo(() => generateHeatmapData(transactions), [transactions]);
 
   useEffect(() => {
     if (isAIEnabled() && transactions.length > 0 && !aiSummaryText) {
@@ -59,14 +71,60 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
   };
 
   const filteredTransactions = useMemo(() => {
-    if (!selectedCategory) return transactions;
-    return transactions.filter(t => t.category === selectedCategory);
-  }, [transactions, selectedCategory]);
+    let txns = transactions;
+    if (selectedFile) {
+      txns = txns.filter(t => t.sourceFile === selectedFile);
+    }
+    if (selectedCategory) {
+      txns = txns.filter(t => t.category === selectedCategory);
+    }
+    return txns;
+  }, [transactions, selectedCategory, selectedFile]);
 
   const uniqueFiles = [...new Set(transactions.map(t => t.sourceFile))];
 
+  const recurringGroups = useMemo(() => {
+    const groups: Record<string, { txn: Transaction; count: number; total: number }> = {};
+    recurring.forEach(t => {
+      const key = `${t.description}-${Math.abs(t.amount).toFixed(2)}-${t.currency}`;
+      if (!groups[key]) groups[key] = { txn: t, count: 0, total: 0 };
+      groups[key].count++;
+      groups[key].total += Math.abs(t.amount);
+    });
+    return Object.values(groups).sort((a, b) => b.total - a.total);
+  }, [recurring]);
+
+  const handleExportCSV = () => {
+    const csv = Papa.unparse(transactions);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `statement-analyzer-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+
+  const [visibleCount, setVisibleCount] = useState(100);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [selectedCategory, selectedFile]);
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 sm:space-y-8">
+      {/* Actions Bar */}
+      <div className="flex justify-end gap-2 animate-entry stagger-1">
+        <button onClick={handleExportCSV} className="btn-ghost text-xs flex items-center gap-1.5">
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </button>
+        <button onClick={() => window.print()} className="btn-ghost text-xs flex items-center gap-1.5">
+          <Share2 className="w-3.5 h-3.5" />
+          Print / PDF
+        </button>
+      </div>
+
       {/* Summary Cards per currency */}
       {currencies.map((currency, ci) => {
         const cs = summary.currencies[currency];
@@ -137,6 +195,69 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
           ) : null}
         </div>
       )}
+
+      {/* Recurring Section */}
+      {recurringGroups.length > 0 && (
+        <div className="glass-card p-4 sm:p-6 animate-entry stagger-5 border-l-4 border-l-[var(--accent-purple)]">
+          <div className="flex items-center gap-2 mb-4">
+            <Repeat className="w-4 h-4 text-[var(--accent-purple)]" />
+            <h3 className="text-sm font-semibold text-[var(--text-secondary)]">Recurring Expenses</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {recurringGroups.slice(0, 9).map((group, i) => (
+              <div key={i} className="glass-card-flat p-3 flex justify-between items-center group hover:bg-[var(--bg-elevated)] transition-colors">
+                <div>
+                  <p className="text-xs font-medium text-[var(--text-primary)] truncate max-w-[150px]">{group.txn.description}</p>
+                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">
+                    {group.txn.recurringPeriod || 'RECURRING'} • {group.count}x
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-[var(--accent-red)] mono-data">
+                  {fmt(Math.abs(group.txn.amount), group.txn.currency)}
+                </p>
+              </div>
+            ))}
+            {recurringGroups.length > 9 && (
+              <div className="flex items-center justify-center text-xs text-[var(--text-muted)] italic">
+                + {recurringGroups.length - 9} more
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Heatmap Section */}
+      <div className="glass-card p-4 sm:p-6 animate-entry stagger-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-[var(--accent-amber)]" />
+            <h3 className="text-sm font-semibold text-[var(--text-secondary)]">Spending Intensity</h3>
+          </div>
+          <div className="flex gap-1 text-[9px] mono-data text-[var(--text-muted)] items-center">
+            <span>Low</span>
+            <div className="w-2 h-2 rounded bg-[var(--accent-amber)]/20"></div>
+            <div className="w-2 h-2 rounded bg-[var(--accent-amber)]/40"></div>
+            <div className="w-2 h-2 rounded bg-[var(--accent-amber)]/70"></div>
+            <div className="w-2 h-2 rounded bg-[var(--accent-amber)]"></div>
+            <span>High</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto custom-scrollbar p-1">
+          {heatmapData.map((d) => (
+            <div 
+              key={d.date} 
+              title={`${d.date}: ${fmt(d.total, 'USD')} (${d.count} txns)`}
+              className={`w-3 h-3 sm:w-4 sm:h-4 rounded-sm transition-all hover:scale-110 cursor-default ${
+                d.intensity === 0 ? 'bg-[var(--bg-elevated)]' :
+                d.intensity === 1 ? 'bg-[var(--accent-amber)]/20' :
+                d.intensity === 2 ? 'bg-[var(--accent-amber)]/40' :
+                d.intensity === 3 ? 'bg-[var(--accent-amber)]/70' :
+                'bg-[var(--accent-amber)]'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
 
       {/* Charts per currency */}
       {currencies.map(currency => {
@@ -310,9 +431,20 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
         </div>
         <div className="flex flex-wrap gap-2">
           {uniqueFiles.map((file, i) => (
-            <span key={i} className="tag flex items-center gap-2 !bg-[var(--accent-amber)]/10 !text-[var(--accent-amber)] !border-[var(--accent-amber)]/20">
+            <span 
+              key={i} 
+              onClick={() => setSelectedFile(selectedFile === file ? null : file)}
+              className={`tag flex items-center gap-2 cursor-pointer transition-all ${
+                selectedFile === file 
+                ? '!bg-[var(--accent-amber)] !text-[var(--bg-deep)] !border-transparent hover:!bg-[var(--accent-amber)]/90' 
+                : '!bg-[var(--accent-amber)]/10 !text-[var(--accent-amber)] !border-[var(--accent-amber)]/20 hover:!bg-[var(--accent-amber)]/20'
+              }`}
+            >
               <span className="truncate max-w-[200px]">{file}</span>
-              <button onClick={() => onRemoveFile(file)} className="hover:text-[var(--accent-red)] transition-colors">&times;</button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onRemoveFile(file); }} 
+                className={`transition-colors ${selectedFile === file ? 'text-[var(--bg-deep)]/70 hover:text-[var(--bg-deep)]' : 'hover:text-[var(--accent-red)]'}`}
+              >&times;</button>
             </span>
           ))}
         </div>
@@ -345,7 +477,7 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.slice(0, 100).map((t) => (
+                {filteredTransactions.slice(0, visibleCount).map((t) => (
                   <tr key={t.id} className="border-b border-[var(--border-subtle)] row-hover transition-colors">
                     <td className="py-3 px-3 text-xs mono-data text-[var(--text-secondary)]">{t.date}</td>
                     <td className="py-3 px-3 text-xs text-[var(--text-primary)] truncate max-w-xs">{t.description}</td>
@@ -366,7 +498,7 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
 
           {/* Mobile card layout */}
           <div className="sm:hidden space-y-2">
-            {filteredTransactions.slice(0, 100).map((t) => (
+            {filteredTransactions.slice(0, visibleCount).map((t) => (
               <div key={t.id} className="glass-card-flat p-3">
                 <div className="flex justify-between items-start mb-1">
                   <span className="text-[10px] mono-data text-[var(--text-muted)]">{t.date}</span>
@@ -385,9 +517,19 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
             ))}
           </div>
 
-          {filteredTransactions.length > 100 && (
+          {filteredTransactions.length > visibleCount ? (
+            <div className="flex justify-center py-6">
+              <button 
+                onClick={() => setVisibleCount(prev => prev + 50)}
+                className="btn-ghost text-xs flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                <ChevronDown className="w-3 h-3" />
+                Load More ({filteredTransactions.length - visibleCount} remaining)
+              </button>
+            </div>
+          ) : (
             <p className="text-center py-4 text-[10px] mono-data text-[var(--text-muted)]">
-              Showing 100 of {filteredTransactions.length}
+              All {filteredTransactions.length} transactions loaded
             </p>
           )}
         </div>

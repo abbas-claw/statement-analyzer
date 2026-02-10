@@ -6,6 +6,8 @@ export interface Transaction {
   currency: string;
   category: string;
   sourceFile: string;
+  isRecurring?: boolean;
+  recurringPeriod?: 'weekly' | 'monthly' | 'yearly';
 }
 
 export interface CurrencySummary {
