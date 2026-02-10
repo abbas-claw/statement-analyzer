@@ -5,7 +5,7 @@ import { FileUploader } from '@/components/FileUploader';
 import { Dashboard } from '@/components/Dashboard';
 import { AISettings } from '@/components/AISettings';
 import { Transaction } from '@/lib/types';
-import { calculateSummary } from '@/lib/parser';
+import { calculateSummary, deduplicateTransactions } from '@/lib/parser';
 import { isAIEnabled, aiCategorize } from '@/lib/ai';
 import { BarChart3, Upload, TrendingUp, DollarSign, Brain, Camera, Zap } from 'lucide-react';
 
@@ -26,7 +26,10 @@ export default function Home() {
     if (isAIEnabled()) {
       try { processed = await aiCategorize(newTransactions); } catch {}
     }
-    setTransactions(prev => [...prev, ...processed]);
+    setTransactions(prev => {
+      const combined = [...prev, ...processed];
+      return deduplicateTransactions(combined);
+    });
     setShowOnboarding(false);
   }, []);
 

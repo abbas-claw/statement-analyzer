@@ -176,6 +176,20 @@ function buildCurrencySummary(txns: Transaction[]): CurrencySummary {
   return { totalSpent, totalIncome, categoryBreakdown, monthlySpending, topMerchants };
 }
 
+export function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
+  const seen = new Map<string, Transaction>();
+
+  for (const t of transactions) {
+    // Create a unique key based on normalized date, description, and amount
+    const key = `${t.date}|${t.description.toLowerCase().trim()}|${t.amount}`;
+    if (!seen.has(key)) {
+      seen.set(key, t);
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
 export function calculateSummary(transactions: Transaction[]) {
   // Group by currency
   const byCurrency: Record<string, Transaction[]> = {};
