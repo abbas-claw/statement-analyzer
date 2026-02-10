@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "crashOnBuildHint": {
+    "limit": 5
+  },
+  "functions": {
+    "src/app/**/*.ts*": {
+      "maxDuration": 60
+    }
+  }
+}

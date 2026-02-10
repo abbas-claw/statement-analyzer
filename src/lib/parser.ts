@@ -11,7 +11,7 @@ export function parseCSV(content: string, fileName: string): Transaction[] {
 
   results.data.forEach((row: any, index: number) => {
     const transaction = normalizeTransaction(row, fileName, index);
-    if (transaction) {
+    if (transaction && isValidTransaction(transaction)) {
       transactions.push(transaction);
     }
   });
@@ -174,6 +174,31 @@ function buildCurrencySummary(txns: Transaction[]): CurrencySummary {
     .slice(0, 10);
 
   return { totalSpent, totalIncome, categoryBreakdown, monthlySpending, topMerchants };
+}
+
+// Keywords that indicate a failed, declined, or pending transaction
+const FAILED_KEYWORDS = [
+  'failed', 'declined', 'pending', 'reversed', 'declined', 'failed',
+  'insufficient', 'over limit', 'auth failed', 'transaction failed',
+  'payment failed', 'purchase failed', 'cancelled', 'voided',
+  'rejected', 'not completed', 'did not complete', 'attempt failed'
+];
+
+export function isValidTransaction(txn: Transaction): boolean {
+  const lowerDesc = txn.description.toLowerCase();
+
+  // Skip failed/declined/pending transactions
+  if (FAILED_KEYWORDS.some(keyword => lowerDesc.includes(keyword))) {
+    return false;
+  }
+
+  // Skip positive amounts (income, refunds, upcoming balance)
+  // We only want actual spending (negative amounts)
+  if (txn.amount > 0) {
+    return false;
+  }
+
+  return true;
 }
 
 export function deduplicateTransactions(transactions: Transaction[]): Transaction[] {

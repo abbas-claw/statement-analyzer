@@ -1,4 +1,5 @@
 import { Transaction, CATEGORY_KEYWORDS } from './types';
+import { isValidTransaction } from './parser';
 
 // Dynamically import pdfjs-dist to avoid SSR issues
 async function getPDFModule() {
@@ -197,7 +198,7 @@ export function extractTransactionsFromPDFText(pdfText: string, fileName: string
 
     const category = categorizeTransaction(description);
 
-    transactions.push({
+    const txn: Transaction = {
       id: `${fileName}-${i}-${Date.now()}`,
       date: dateStr,
       description: description.substring(0, 100),
@@ -205,7 +206,11 @@ export function extractTransactionsFromPDFText(pdfText: string, fileName: string
       currency,
       category,
       sourceFile: fileName,
-    });
+    };
+
+    if (isValidTransaction(txn)) {
+      transactions.push(txn);
+    }
   }
 
   return transactions;
