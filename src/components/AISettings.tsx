@@ -38,67 +38,70 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="brutal-card bg-white p-6 max-w-md w-full">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade">
+      <div className="glass-card p-6 max-w-md w-full" style={{
+        background: 'linear-gradient(145deg, var(--bg-card), var(--bg-surface))',
+        borderColor: 'var(--border-default)',
+      }}>
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-[var(--accent-purple)] flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--accent-purple)]/15 border border-[var(--accent-purple)]/25 flex items-center justify-center">
+              <Brain className="w-5 h-5 text-[var(--accent-purple)]" />
             </div>
             <div>
-              <h3 className="text-lg font-bold uppercase tracking-wide">AI Features</h3>
-              <p className="text-xs text-gray-500 font-medium">Smarter analysis</p>
+              <h3 className="text-base font-semibold text-[var(--text-primary)]">AI Features</h3>
+              <p className="text-[10px] mono-data text-[var(--text-muted)]">smarter analysis</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 border-2 border-[var(--border)]">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="brutal-card-flat p-3 mb-4 bg-[var(--accent-lime)]">
-          <p className="text-xs font-bold">
-            <Zap className="w-3.5 h-3.5 inline mr-1" />
-            Enables: Smart categorization • Spending summary • Screenshot reading
+        <div className="rounded-lg p-3 mb-4 bg-[var(--accent-teal)]/8 border border-[var(--accent-teal)]/15">
+          <p className="text-[11px] text-[var(--accent-teal)]">
+            <Zap className="w-3 h-3 inline mr-1" />
+            Enables: Smart categorization, spending summary, screenshot reading
           </p>
         </div>
 
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-xs text-[var(--text-muted)] mb-5 leading-relaxed">
           API key stays in your browser. Calls go direct to the provider — no middleman.
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-2">Provider</label>
+            <label className="block text-[10px] mono-data text-[var(--text-muted)] tracking-wider mb-2">PROVIDER</label>
             <div className="flex gap-2">
               {(['openai', 'gemini'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => setProvider(p)}
-                  className={`flex-1 px-3 py-3 text-sm font-bold uppercase tracking-wide border-3 transition-all ${
+                  className={`flex-1 px-3 py-3 text-xs font-semibold rounded-lg border transition-all ${
                     provider === p
-                      ? 'bg-[var(--accent-purple)] text-white border-[var(--border)] shadow-[3px_3px_0px_var(--border)]'
-                      : 'bg-white border-[var(--border)] hover:bg-gray-50'
+                      ? 'bg-[var(--accent-purple)]/15 text-[var(--accent-purple)] border-[var(--accent-purple)]/30'
+                      : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--border-default)]'
                   }`}
                 >
-                  {p === 'openai' ? 'OpenAI' : 'Gemini ✦ Free'}
+                  {p === 'openai' ? 'OpenAI' : 'Gemini — Free'}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-2">
-              <Key className="w-3.5 h-3.5 inline mr-1" />
-              API Key
+            <label className="block text-[10px] mono-data text-[var(--text-muted)] tracking-wider mb-2">
+              <Key className="w-3 h-3 inline mr-1" />
+              API KEY
             </label>
             <input
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               placeholder={provider === 'openai' ? 'sk-...' : 'AIza...'}
-              className="w-full px-3 py-3 border-3 border-[var(--border)] text-sm font-mono focus:ring-0 focus:border-[var(--accent-purple)] outline-none bg-white"
+              className="w-full px-3 py-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-sm mono-data text-[var(--text-primary)] focus:border-[var(--accent-purple)] outline-none transition-colors placeholder-[var(--text-muted)]"
             />
-            <p className="text-xs text-gray-400 mt-1 font-medium">
+            <p className="text-[10px] mono-data text-[var(--text-muted)] mt-1.5">
               {provider === 'openai'
                 ? '→ platform.openai.com/api-keys'
                 : '→ aistudio.google.com/apikey (free tier available)'}
@@ -108,26 +111,20 @@ export function AISettings({ onClose, onSave }: AISettingsProps) {
 
         <div className="flex gap-2 mt-6">
           {getAIKey() && (
-            <button
-              onClick={handleClear}
-              className="brutal-btn px-4 py-2 text-xs bg-[var(--accent-red)] text-white"
-            >
+            <button onClick={handleClear} className="btn-ghost text-xs !text-[var(--accent-red)] !border-[var(--accent-red)]/30">
               Remove
             </button>
           )}
           <div className="flex-1" />
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-bold uppercase hover:bg-gray-100 border-2 border-gray-300"
-          >
+          <button onClick={onClose} className="btn-ghost text-xs">
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saved}
-            className="brutal-btn px-6 py-2 text-xs bg-[var(--accent-purple)] text-white disabled:opacity-50"
+            className="btn-primary text-xs disabled:opacity-50"
           >
-            {saved ? <><Check className="w-4 h-4 inline mr-1" />Done</> : 'Save'}
+            {saved ? <><Check className="w-3.5 h-3.5 inline mr-1" />Done</> : 'Save'}
           </button>
         </div>
       </div>

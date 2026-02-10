@@ -77,9 +77,8 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
         startTransition(() => setProcessingFile(file.name));
 
         if (isImageFile(file)) {
-          // Image OCR via AI
           if (!isAIEnabled()) {
-            startTransition(() => setError(`Enable AI (click "AI" in header) to extract transactions from screenshots.`));
+            startTransition(() => setError(`Enable AI to extract transactions from screenshots.`));
             continue;
           }
           const base64 = await fileToBase64(file);
@@ -96,7 +95,6 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
           }
           allTransactions.push(...transactions);
         } else {
-          // CSV or text
           const content = await readFileContent(file);
           let transactions = parseCSV(content, file.name);
           if (isAIEnabled() && transactions.length > 0) {
@@ -142,10 +140,10 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`brutal-card-flat p-8 sm:p-12 text-center cursor-pointer transition-all
+        className={`rounded-xl border-2 border-dashed p-8 sm:p-12 text-center cursor-pointer transition-all duration-300
           ${isDragging
-            ? 'bg-[var(--accent-lime)] border-[var(--accent-blue)]'
-            : 'bg-white hover:bg-gray-50'
+            ? 'border-[var(--accent-teal)] bg-[var(--accent-teal)]/5'
+            : 'border-[var(--border-default)] bg-[var(--bg-card)] hover:border-[var(--border-accent)] hover:bg-[var(--bg-card-hover)]'
           }`}
       >
         <input
@@ -158,63 +156,59 @@ export function FileUploader({ onFilesParsed }: FileUploaderProps) {
         />
 
         <label htmlFor="file-upload" className="cursor-pointer block">
-          <div className="flex justify-center gap-3 mb-4">
-            <Upload className="w-12 h-12 sm:w-16 sm:h-16 text-[var(--fg)]" strokeWidth={2.5} />
+          <div className="flex justify-center mb-4">
+            <div className="w-14 h-14 rounded-xl bg-[var(--accent-teal)]/10 border border-[var(--accent-teal)]/20 flex items-center justify-center">
+              <Upload className="w-7 h-7 text-[var(--accent-teal)]" strokeWidth={1.5} />
+            </div>
           </div>
-          <p className="text-lg sm:text-xl font-bold text-[var(--fg)] mb-2 uppercase tracking-wide">
+          <p className="text-base sm:text-lg font-semibold text-[var(--text-primary)] mb-1">
             Drop files here
           </p>
-          <p className="text-sm text-gray-600 font-medium">
-            CSV, PDF{aiOn ? ', or Screenshots (PNG, JPG)' : ''}
+          <p className="text-xs text-[var(--text-muted)] mono-data">
+            CSV, PDF{aiOn ? ', PNG, JPG — AI reads screenshots' : ''}
           </p>
           {aiOn && (
-            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-[var(--accent-purple)] text-white text-xs font-bold uppercase brutal-tag">
-              <Camera className="w-3.5 h-3.5" />
-              AI Screenshot Reading Active
+            <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-purple)]/10 border border-[var(--accent-purple)]/20">
+              <Camera className="w-3 h-3 text-[var(--accent-purple)]" />
+              <span className="text-[10px] mono-data text-[var(--accent-purple)]">AI Screenshot Reading Active</span>
             </div>
           )}
         </label>
       </div>
 
       {processing && (
-        <div className="mt-4 brutal-card-flat p-4 bg-[var(--accent-yellow)] flex items-center gap-3">
-          <div className="w-5 h-5 border-3 border-[var(--fg)] border-t-transparent rounded-full animate-spin" />
-          <span className="font-bold text-sm uppercase">Processing {processingFile}...</span>
+        <div className="mt-4 rounded-lg p-4 bg-[var(--accent-amber)]/10 border border-[var(--accent-amber)]/20 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-[var(--accent-amber)] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-[var(--accent-amber)] mono-data">Processing {processingFile}...</span>
         </div>
       )}
 
       {error && (
-        <div className="mt-4 brutal-card-flat p-4 bg-[var(--accent-pink)] text-white flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm font-medium">{error}</span>
+        <div className="mt-4 rounded-lg p-4 bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/20 flex items-center gap-3">
+          <AlertCircle className="w-4 h-4 text-[var(--accent-red)] flex-shrink-0" />
+          <span className="text-xs text-[var(--accent-red)]">{error}</span>
         </div>
       )}
 
       {files.length > 0 && (
         <div className="mt-6">
-          <h3 className="font-bold text-sm uppercase tracking-wider mb-3">Uploaded</h3>
+          <h3 className="text-[10px] mono-data text-[var(--text-muted)] tracking-wider mb-3">UPLOADED</h3>
           <div className="space-y-2">
             {files.map((file, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 brutal-card-flat bg-white"
-              >
+              <div key={index} className="flex items-center justify-between p-3 glass-card-flat">
                 <div className="flex items-center gap-3 min-w-0">
                   {isImageFile(file) ? (
-                    <Image className="w-5 h-5 text-[var(--accent-purple)] flex-shrink-0" />
+                    <Image className="w-4 h-4 text-[var(--accent-purple)] flex-shrink-0" />
                   ) : (
-                    <FileText className="w-5 h-5 text-[var(--fg)] flex-shrink-0" />
+                    <FileText className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
                   )}
-                  <span className="text-sm font-medium truncate">{file.name}</span>
-                  <span className="text-xs text-gray-400 flex-shrink-0">
+                  <span className="text-xs text-[var(--text-primary)] truncate">{file.name}</span>
+                  <span className="text-[10px] mono-data text-[var(--text-muted)] flex-shrink-0">
                     {(file.size / 1024).toFixed(1)}KB
                   </span>
                 </div>
-                <button
-                  onClick={() => removeFile(index)}
-                  className="p-1 hover:bg-gray-200 flex-shrink-0"
-                >
-                  <X className="w-4 h-4" />
+                <button onClick={() => removeFile(index)} className="p-1 hover:text-[var(--accent-red)] text-[var(--text-muted)] transition-colors flex-shrink-0">
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
