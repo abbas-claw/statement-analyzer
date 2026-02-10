@@ -77,34 +77,30 @@ export function Dashboard({ transactions, summary, onRemoveFile, onAddTransactio
                 {currency}
               </div>
             )}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <StatCard
-                label="Spent"
+                label="Total Spent"
                 value={fmt(cs.totalSpent, currency)}
                 icon={<ArrowUpRight className="w-4 h-4" />}
                 accent="var(--accent-red)"
                 delay={0}
               />
               <StatCard
-                label="Income"
-                value={fmt(cs.totalIncome, currency)}
-                icon={<ArrowDownRight className="w-4 h-4" />}
-                accent="var(--accent-green)"
-                delay={1}
-              />
-              <StatCard
                 label="Transactions"
                 value={String(transactions.filter(t => t.currency === currency).length)}
                 icon={<CreditCard className="w-4 h-4" />}
                 accent="var(--accent-teal)"
-                delay={2}
+                delay={1}
               />
               <StatCard
-                label="Net"
-                value={`${cs.totalIncome - cs.totalSpent >= 0 ? '+' : ''}${fmt(cs.totalIncome - cs.totalSpent, currency)}`}
+                label="Avg / Transaction"
+                value={(() => {
+                  const count = transactions.filter(t => t.currency === currency).length;
+                  return count > 0 ? fmt(cs.totalSpent / count, currency) : fmt(0, currency);
+                })()}
                 icon={<TrendingUp className="w-4 h-4" />}
-                accent={cs.totalIncome - cs.totalSpent >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}
-                delay={3}
+                accent="var(--accent-amber)"
+                delay={2}
               />
             </div>
           </div>

@@ -178,10 +178,21 @@ function buildCurrencySummary(txns: Transaction[]): CurrencySummary {
 
 // Keywords that indicate a failed, declined, or pending transaction
 const FAILED_KEYWORDS = [
-  'failed', 'declined', 'pending', 'reversed', 'declined', 'failed',
+  'failed', 'declined', 'pending', 'reversed',
   'insufficient', 'over limit', 'auth failed', 'transaction failed',
   'payment failed', 'purchase failed', 'cancelled', 'voided',
   'rejected', 'not completed', 'did not complete', 'attempt failed'
+];
+
+// Keywords that indicate incoming money (not spending)
+const INCOMING_KEYWORDS = [
+  'deposit', 'direct deposit', 'payroll', 'salary', 'wage',
+  'refund', 'cashback', 'cash back', 'rebate', 'reimbursement',
+  'interest earned', 'interest payment', 'dividend',
+  'received', 'incoming', 'credit from', 'transfer from',
+  'reversal credit', 'payment received', 'money received',
+  'top up', 'top-up', 'topup', 'funding', 'loaded',
+  'reward', 'bonus', 'promotional credit'
 ];
 
 export function isValidTransaction(txn: Transaction): boolean {
@@ -193,8 +204,18 @@ export function isValidTransaction(txn: Transaction): boolean {
   }
 
   // Skip positive amounts (income, refunds, upcoming balance)
-  // We only want actual spending (negative amounts)
   if (txn.amount > 0) {
+    return false;
+  }
+
+  // Skip incoming transfers even if amount appears negative
+  // (some parsers force all amounts negative)
+  if (INCOMING_KEYWORDS.some(keyword => lowerDesc.includes(keyword))) {
+    return false;
+  }
+
+  // Skip transactions categorized as Income or Transfer (incoming)
+  if (txn.category === 'Income') {
     return false;
   }
 
